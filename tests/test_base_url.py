@@ -75,6 +75,19 @@ class KeyAlias(unittest.TestCase):
                   or merged.get("TIKHUB_API_KEY"))
         self.assertTrue(picked)
 
+    def test_new_name_beats_injected_old_name(self):
+        """新名压过旧名，与位置无关。
+
+        服务端上 Cursor 注入了一把陈旧的上游 TIKHUB_API_KEY，盖掉了 .env 里的
+        网关 key，于是拿旧 key 去打网关吃 401，而 --diagnose 一切正常。
+        设新名是刻意行为，旧名可能是环境残留——刻意的那个该赢。
+        """
+        env_file = {"L30D_API_KEY": "l30d_box_good"}          # .env 里的新名
+        process = {"TIKHUB_API_KEY": "OLD_UPSTREAM_STALE"}    # 被注入的旧名
+        new = process.get("L30D_API_KEY") or env_file.get("L30D_API_KEY")
+        old = process.get("TIKHUB_API_KEY") or env_file.get("TIKHUB_API_KEY")
+        self.assertEqual(new or old, "l30d_box_good")
+
     def test_gate_accepts_gateway_key(self):
         """闸门只看 key 在不在、不看格式——l30d_ 开头的也得放行。"""
         config = {"TIKHUB_API_KEY": "l30d_alice_xxx"}

@@ -43,22 +43,24 @@ def _base() -> str:
     if _base_cache is not None:
         return _base_cache
 
-    value = os.environ.get("L30D_BASE_URL") or os.environ.get("TIKHUB_BASE_URL")
-    if not value:
-        try:
-            # 走 load_env_file 而非 env.get_config()：后者只返回它 keys 列表里
-            # 登记过的键，于是本文件能否单独升级就取决于对方的 env.py 版本。
-            # 这三个底层函数上游一直有，所以本文件可以单独替换、不牵连 env.py。
-            from . import env as _env
-            merged: Dict[str, str] = {}
-            if getattr(_env, "CONFIG_FILE", None):
-                merged.update(_env.load_env_file(_env.CONFIG_FILE))
-            project = _env._find_project_env()
-            if project:
-                merged.update(_env.load_env_file(project))   # 项目级优先
-            value = merged.get("L30D_BASE_URL") or merged.get("TIKHUB_BASE_URL")
-        except Exception:  # noqa: BLE001 — 读不到配置就退回默认，不该因此挂掉
-            value = None
+    merged: Dict[str, str] = {}
+    try:
+        # 走 load_env_file 而非 env.get_config()：后者只返回它 keys 列表里
+        # 登记过的键，于是本文件能否单独升级就取决于对方的 env.py 版本。
+        # 这三个底层函数上游一直有，所以本文件可以单独替换、不牵连 env.py。
+        from . import env as _env
+        if getattr(_env, "CONFIG_FILE", None):
+            merged.update(_env.load_env_file(_env.CONFIG_FILE))
+        project = _env._find_project_env()
+        if project:
+            merged.update(_env.load_env_file(project))       # 项目级优先
+    except Exception:  # noqa: BLE001 — 读不到配置就退回默认，不该因此挂掉
+        pass
+
+    # 与 env.py 的 key 解析同一规则：**新名在任何位置都压过旧名**。
+    # 旧名会被别的工具注入（服务端上 Cursor 注入过陈旧值），刻意设的新名该赢。
+    value = (os.environ.get("L30D_BASE_URL") or merged.get("L30D_BASE_URL")
+             or os.environ.get("TIKHUB_BASE_URL") or merged.get("TIKHUB_BASE_URL"))
 
     _base_cache = (value or _UPSTREAM).rstrip("/")
     return _base_cache

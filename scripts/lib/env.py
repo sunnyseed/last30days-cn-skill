@@ -110,13 +110,25 @@ def get_config() -> Dict[str, Any]:
 
     # 中性别名：文档只写 L30D_API_KEY，内部仍统一用 TIKHUB_API_KEY 这个键，
     # 免得 is_source_available 等一堆判断跟着改。旧名仍接受，避免弄挂已有配置。
-    # 顺序照引擎既有规则：进程环境 > 配置文件；同一层内新名优先。
-    config["TIKHUB_API_KEY"] = (
-        os.environ.get("L30D_API_KEY")
-        or os.environ.get("TIKHUB_API_KEY")
-        or merged_env.get("L30D_API_KEY")
-        or merged_env.get("TIKHUB_API_KEY")
-    )
+    #
+    # **新名在任何位置都压过旧名**，而不是照「进程环境 > 配置文件」一刀切。
+    # 因为 TIKHUB_API_KEY 这个名字会被别的工具注入（实测：服务端上 Cursor 注入了
+    # 一把陈旧的上游 key，盖掉了 .env 里的网关 key，于是拿旧 key 去打网关吃 401，
+    # 而 --diagnose 一切正常）。设 L30D_API_KEY 是一次刻意行为，旧名则可能是
+    # 环境里的历史残留——刻意的那个该赢。同名之间仍是进程环境 > 配置文件。
+    _new = os.environ.get("L30D_API_KEY") or merged_env.get("L30D_API_KEY")
+    _old = os.environ.get("TIKHUB_API_KEY") or merged_env.get("TIKHUB_API_KEY")
+    config["TIKHUB_API_KEY"] = _new or _old
+
+    # 两个名字都设了却不是同一个值，说明环境里有历史残留。这种情况静默择一
+    # 正是上面那个事故的成因，所以说出来。
+    if _new and _old and _new != _old:
+        import sys
+        sys.stderr.write(
+            "[last30days-cn] 注意：L30D_API_KEY 与 TIKHUB_API_KEY 同时设置且值不同，"
+            f"已采用 L30D_API_KEY（{_new[:9]}…）。"
+            "若非本意，请清掉环境里残留的 TIKHUB_API_KEY。\n"
+        )
 
     if project_env_path:
         config["_CONFIG_SOURCE"] = f"project:{project_env_path}"
