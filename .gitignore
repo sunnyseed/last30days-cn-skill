@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# 配置与密钥：只提交 .env.example，绝不提交真 key
+.env
+*.env
+!.env.example
+.claude/last30days-cn.env
+
+# 运行产物
+log/
+report.html
+last30days.context.md
+.cache/

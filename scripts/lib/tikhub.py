@@ -1,0 +1,93 @@
+"""TikHub 数据层 —— 各平台源共用的 HTTP 客户端。
+
+TikHub（api.tikhub.io）是第三方社媒数据聚合商，$0.001/次、非 200 不计费。
+小红书/抖音/微博/B站/微信搜一搜都走它，故把鉴权、UA、重试、响应解包收在这里，
+省得每个平台模块各写一份。
+
+踩坑（都是实测出来的，改动前先读）：
+- **必带 UA**：不带会被 TikHub 前面的 Cloudflare 拦成 `403 error code 1010`，
+  且响应体不是 JSON，看着像鉴权失败其实不是。
+- **响应时间抖动大**：小红书 2~30s、B站见过 34s。单次 20s 超时会随机空手而归，
+  故 45s + 3 次退避重试。超时/非 200 都不计费，重试是免费的。
+- **OpenAPI 无字段约定**：1063 个端点的 200 响应全标成同一个通用 ResponseModel，
+  故各平台的解析都得按实测结构写，且要对结构变动留余地。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any, Dict, Optional
+
+BASE = "https://api.tikhub.io"
+_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
+_TIMEOUT = 45
+_RETRIES = 3
+
+
+def _request(path: str, key: str, *, params: Optional[Dict[str, Any]] = None,
+             body: Optional[Dict[str, Any]] = None, tag: str = "") -> Optional[Dict[str, Any]]:
+    url = f"{BASE}{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    payload = json.dumps(body).encode("utf-8") if body is not None else None
+    last = None
+    for attempt in range(_RETRIES):
+        try:
+            req = urllib.request.Request(url, data=payload)
+            req.add_header("Authorization", f"Bearer {key}")
+            req.add_header("User-Agent", _UA)
+            req.add_header("Accept", "application/json")
+            if payload is not None:
+                req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:160]}"
+            # 鉴权/风控/路径错/参数错重试无意义，直接放弃
+            if e.code in (401, 403, 404, 422):
+                break
+        except Exception as e:  # noqa: BLE001 — 超时/连接重置值得重试
+            last = f"{type(e).__name__}: {e}"
+        if attempt < _RETRIES - 1:
+            time.sleep(1.5 * (attempt + 1))
+    sys.stderr.write(f"[{tag or 'tikhub'}] TikHub 请求失败 {path}: {last}\n")
+    return None
+
+
+def get(path: str, params: Dict[str, Any], key: str, tag: str = "") -> Optional[Dict[str, Any]]:
+    """GET 一个 TikHub 端点，返回整个响应体（含 code/data）。"""
+    return _request(path, key, params=params, tag=tag)
+
+
+def post(path: str, body: Dict[str, Any], key: str, tag: str = "") -> Optional[Dict[str, Any]]:
+    """POST 一个 TikHub 端点（抖音 search/* 与微信搜一搜都是 POST）。"""
+    return _request(path, key, body=body, tag=tag)
+
+
+def span_days(from_date: str, to_date: str, default: int = 30) -> int:
+    """日期窗口天数；解析不了就按默认值（引擎自己还会再过滤一次）。"""
+    from . import dates
+
+    try:
+        return (dates.parse_date(to_date) - dates.parse_date(from_date)).days
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def bucket(from_date: str, to_date: str, day: Any, week: Any, half_year: Any) -> Any:
+    """把日期窗口套进「一天/一周/半年」三档——多数平台只给这三个档位。
+
+    超过 7 天一律用「半年内」再由引擎按真实窗口收窄；反过来（拿一周档去查 30 天）
+    会丢掉 8~30 天前的内容，宁可多取不可少取。
+    """
+    span = span_days(from_date, to_date)
+    if span <= 1:
+        return day
+    if span <= 7:
+        return week
+    return half_year
