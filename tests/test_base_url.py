@@ -16,12 +16,18 @@ class BaseUrl(unittest.TestCase):
     def setUp(self):
         self._saved = {k: os.environ.pop(k, None)
                        for k in ("L30D_BASE_URL", "TIKHUB_BASE_URL")}
+        # 生产里地址只解析一次并缓存；测试要逐条重来，必须清掉
+        tikhub._base_cache = None
+        # 也别让本机 ~/.config 或项目 .env 干扰（_base() 现在也读配置文件）
+        os.environ["LAST30DAYS_CN_CONFIG_DIR"] = ""
 
     def tearDown(self):
         for k, v in self._saved.items():
             os.environ.pop(k, None)
             if v is not None:
                 os.environ[k] = v
+        os.environ.pop("LAST30DAYS_CN_CONFIG_DIR", None)
+        tikhub._base_cache = None
 
     def test_default_is_upstream(self):
         self.assertEqual(tikhub._base(), "https://api.tikhub.io")
@@ -38,6 +44,25 @@ class BaseUrl(unittest.TestCase):
     def test_trailing_slash_stripped(self):
         os.environ["L30D_BASE_URL"] = "https://gw.example.com/"
         self.assertEqual(tikhub._base(), "https://gw.example.com")
+
+    def test_reads_config_file_too(self):
+        """地址也要能从 .env 读——只认进程环境的话，会出现「同一个 .env 里
+        key 生效、地址不生效」，后果是拿网关 key 去直连上游、静默 403。"""
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, ".env"), "w", encoding="utf-8") as f:
+            f.write("L30D_BASE_URL=https://from-file.example.com\n")
+        os.environ["LAST30DAYS_CN_CONFIG_DIR"] = d
+        import importlib
+        from lib import env as _env
+        importlib.reload(_env)
+        tikhub._base_cache = None
+        try:
+            self.assertEqual(tikhub._base(), "https://from-file.example.com")
+        finally:
+            os.environ["LAST30DAYS_CN_CONFIG_DIR"] = ""
+            importlib.reload(_env)
+            tikhub._base_cache = None
 
 
 class KeyAlias(unittest.TestCase):

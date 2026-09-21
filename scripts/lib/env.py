@@ -99,6 +99,8 @@ def get_config() -> Dict[str, Any]:
         ("BAIDU_SECRET_KEY", None),
         ("TOUTIAO_API_KEY", None),
         ("XIAOHONGSHU_API_BASE", None),
+        ("L30D_BASE_URL", None),
+        ("TIKHUB_BASE_URL", None),
         ("SETUP_COMPLETE", None),
     ]
 

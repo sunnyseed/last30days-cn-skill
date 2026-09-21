@@ -24,18 +24,48 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
+_UPSTREAM = "https://api.tikhub.io"
+_base_cache: Optional[str] = None
+
+
 def _base() -> str:
     """数据源地址。默认直连上游；设 L30D_BASE_URL 可改指向自建转发层。
 
     默认值必须保持上游官方地址——本仓库是公开的，把某个私有转发层写成默认值
     等于让陌生人往那个端点上打。团队用法是各自设 L30D_BASE_URL。
+
+    **配置文件也要读**：key 是 env.get_config() 从 .env 读的，地址若只认进程
+    环境，就会出现「同一个 .env 里两个键一个生效一个不生效」——后果是拿着
+    l30d_ 的 key 去直连上游、静默 403，而 --diagnose 还显示一切正常
+    （它只检查 key 在不在）。这个坑在给服务端写更新说明时踩过。
     """
-    return (os.environ.get("L30D_BASE_URL")
-            or os.environ.get("TIKHUB_BASE_URL")  # 旧名，仍接受
-            or "https://api.tikhub.io").rstrip("/")
+    global _base_cache
+    if _base_cache is not None:
+        return _base_cache
+
+    value = os.environ.get("L30D_BASE_URL") or os.environ.get("TIKHUB_BASE_URL")
+    if not value:
+        try:
+            # 走 load_env_file 而非 env.get_config()：后者只返回它 keys 列表里
+            # 登记过的键，于是本文件能否单独升级就取决于对方的 env.py 版本。
+            # 这三个底层函数上游一直有，所以本文件可以单独替换、不牵连 env.py。
+            from . import env as _env
+            merged: Dict[str, str] = {}
+            if getattr(_env, "CONFIG_FILE", None):
+                merged.update(_env.load_env_file(_env.CONFIG_FILE))
+            project = _env._find_project_env()
+            if project:
+                merged.update(_env.load_env_file(project))   # 项目级优先
+            value = merged.get("L30D_BASE_URL") or merged.get("TIKHUB_BASE_URL")
+        except Exception:  # noqa: BLE001 — 读不到配置就退回默认，不该因此挂掉
+            value = None
+
+    _base_cache = (value or _UPSTREAM).rstrip("/")
+    return _base_cache
 
 
-BASE = _base()  # 兼容旧引用；实际请求走 _base()，见下
+# 注意：别在这里写 BASE = _base()——import 时求值会把缓存定死，
+# 测试里后设的环境变量就不生效了。要地址请调 _base()。
 _UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
 _TIMEOUT = 45
 _RETRIES = 3
