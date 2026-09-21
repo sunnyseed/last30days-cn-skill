@@ -50,7 +50,7 @@ grep -rn "openrouter\|api.openai\|generativelanguage" scripts/ tools/   # 无输
 这是一个**自包含目录**，放到宿主能读到的地方即可，没有安装脚本，没有构建步骤。
 
 ```bash
-unzip last30days-cn-tikhub-3.3.0.zip -d <你的技能目录>/
+git clone https://github.com/sunnyseed/last30days-cn-skill.git <你的技能目录>/last30days-cn
 ```
 
 配置 key，三选一（优先级：进程环境 > 项目配置 > 全局配置）：

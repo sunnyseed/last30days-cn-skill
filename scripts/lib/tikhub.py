@@ -67,7 +67,7 @@ def _request(path: str, key: str, *, params: Optional[Dict[str, Any]] = None,
             last = f"{type(e).__name__}: {e}"
         if attempt < _RETRIES - 1:
             time.sleep(1.5 * (attempt + 1))
-    sys.stderr.write(f"[{tag or 'tikhub'}] TikHub 请求失败 {path}: {last}\n")
+    sys.stderr.write(f"[{tag or '数据源'}] 数据源请求失败 {path}: {last}\n")
     return None
 
 

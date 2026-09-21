@@ -125,12 +125,12 @@ def _search_via_tikhub(
         if page == 1 and parsed.get("search_stats"):
             stats = parsed["search_stats"].get("search_stats")
             if stats:
-                sys.stderr.write(f"[微博] TikHub 生效区间：{stats}\n")
+                sys.stderr.write(f"[微博] 数据源生效区间：{stats}\n")
         items.extend(_parse_tikhub_post(r) for r in results)
         if len(items) >= limit:
             break
     if items:
-        sys.stderr.write(f"[微博] TikHub 获取 {len(items)} 条结果\n")
+        sys.stderr.write(f"[微博] 数据源获取 {len(items)} 条结果\n")
     return items[:limit]
 
 

@@ -128,7 +128,7 @@ def _search_via_tikhub(
         search_id = ((data.get("log_pb") or {}).get("impr_id")) or search_id
         time.sleep(0.3)
     if items:
-        sys.stderr.write(f"[抖音] TikHub 获取 {len(items)} 条结果\n")
+        sys.stderr.write(f"[抖音] 数据源获取 {len(items)} 条结果\n")
     return items[:limit]
 
 

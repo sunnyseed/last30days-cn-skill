@@ -126,7 +126,7 @@ def _search_via_tikhub(
             break
         time.sleep(0.3)
     if items:
-        sys.stderr.write(f"[B站] TikHub 获取 {len(items)} 条结果\n")
+        sys.stderr.write(f"[B站] 数据源获取 {len(items)} 条结果\n")
     return items[:limit]
 
 
