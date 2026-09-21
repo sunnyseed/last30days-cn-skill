@@ -1,8 +1,8 @@
 ---
 name: last30days-cn
-version: "3.3.0-cn-tikhub"
-description: "Chinese-platform last-30-days research skill. Weibo, Xiaohongshu, Bilibili, WeChat and Douyin run on TikHub (server-side date filtering, real publish timestamps); sources with no working data path are gated off instead of degrading to search-engine fallbacks. Markdown, JSON, compact context, and standalone HTML report output."
-argument-hint: 'last30 AI 编程助手, last30 最近 30 天中文平台舆情, last30 具身智能 --html'
+version: "3.3.0-cn"
+description: "中文平台舆情检索 / 国内在聊什么。检索小红书、微博、B站、抖音、微信公众号过去 30 天的真实讨论，带发布时间、作者、互动数与原链接。适用于：话题舆情、国内讨论、网友怎么看、平台风向、产品口碑、热点追踪、中文内容调研。Chinese social-platform research for the last 30 days (Xiaohongshu, Weibo, Bilibili, Douyin, WeChat). 无真实数据路径的源会被跳过而非退化成搜索引擎兜底。输出 Markdown / JSON / compact / 独立 HTML 报告。"
+argument-hint: '小红书上大家怎么看 AI 视频生成, 国内在聊什么 具身智能, 微博 纳指ETF, last30 国产大模型 本地部署 --html'
 allowed-tools: Bash, Read, Write, WebSearch
 author: Jesse
 license: MIT
@@ -12,7 +12,8 @@ metadata:
     emoji: "CN"
     requires:
       optionalEnv:
-        - TIKHUB_API_KEY
+        - L30D_API_KEY
+        - L30D_BASE_URL
         - WEIBO_ACCESS_TOKEN
         - ZHIHU_COOKIE
         - DOUYIN_API_KEY
@@ -47,14 +48,14 @@ You are a Chinese-platform research assistant. Use this skill when the user asks
 
 | 源 | 主路径 | 时间筛选 | 无 key 时 |
 |---|---|---|---|
-| 微博 | TikHub 高级搜索 | **任意区间**（`custom:起:止`，服务端） | 开放平台 token / Playwright，否则不可用 |
-| 小红书 | TikHub 笔记搜索 | 一天/一周/半年档 | 自托管 xiaohongshu-mcp / Playwright，否则不可用 |
-| B站 | TikHub 综合搜索 | **时间戳区间**（服务端） | 网页版公开 API（常被风控）/ Playwright |
-| 微信公众号 | TikHub 搜一搜 | 一天/一周/半年档 | 第三方 API（付费）/ 搜狗微信，均不稳 |
-| 抖音 | TikHub 视频搜索 | 一天/一周/半年档 | Playwright，否则不可用 |
-| 知乎 | —（TikHub 无综合搜索端点） | — | 需 `ZHIHU_COOKIE` 或 Playwright，否则**不可用** |
+| 微博 | 数据源高级搜索 | **任意区间**（`custom:起:止`，服务端） | 开放平台 token / Playwright，否则不可用 |
+| 小红书 | 数据源笔记搜索 | 一天/一周/半年档 | 自托管 xiaohongshu-mcp / Playwright，否则不可用 |
+| B站 | 数据源综合搜索 | **时间戳区间**（服务端） | 网页版公开 API（常被风控）/ Playwright |
+| 微信公众号 | 数据源搜一搜 | 一天/一周/半年档 | 第三方 API（付费）/ 搜狗微信，均不稳 |
+| 抖音 | 数据源视频搜索 | 一天/一周/半年档 | Playwright，否则不可用 |
+| 知乎 | —（数据源无综合搜索端点） | — | 需 `ZHIHU_COOKIE` 或 Playwright，否则**不可用** |
 | 百度 | 需 `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | — | 抓页常被安全验证拦截，**默认不可用** |
-| 今日头条 | —（TikHub 只有按 id 取详情） | — | **恒不可用** |
+| 今日头条 | —（数据源只有按 id 取详情） | — | **恒不可用** |
 
 **可用性闸门**：没有真实数据路径的源会被直接跳过，不参与检索，报告里显示「源不可用」。这是刻意行为——这些源原本会退到 Bing 站内搜索，返回没有发布时间的常青词条（百度百科之类），在「最近 N 天」的报告里是纯噪音。显式 `--search` 指定也照样被拦；确需强跑设 `LAST30DAYS_FORCE_SOURCES=1`。
 
@@ -141,13 +142,14 @@ The HTML report uses a Swiss/IKB visual system inspired by `op7418/guizang-ppt-s
 
 ## Configuration
 
-**`TIKHUB_API_KEY` 是主要依赖**：没有它，微博/小红书/微信/抖音四个源都会被闸门判为不可用（B站还能碰运气走网页版公开 API）。注册见 https://tikhub.io ，$0.001/次、非 200 不计费，注册送额度。
+**`L30D_API_KEY` 是主要依赖**：没有它，微博/小红书/微信/抖音四个源都会被闸门判为不可用（B站还能碰运气走网页版公开 API）。key 由数据源提供方或你所在团队的转发层发放。
 
 ```ini
-TIKHUB_API_KEY=            # 主力。微博/小红书/B站/微信/抖音共用
+L30D_API_KEY=              # 主力。微博/小红书/B站/微信/抖音共用
+L30D_BASE_URL=             # 可选。指向团队自建转发层；留空则直连默认数据源
 ZHIHU_COOKIE=              # 可选，接通知乎
-WEIBO_ACCESS_TOKEN=        # 可选，微博开放平台（TikHub 已覆盖，通常不需要）
-WECHAT_API_KEY=            # 可选，极速数据第三方微信搜索（TikHub 已覆盖）
+WEIBO_ACCESS_TOKEN=        # 可选，微博开放平台（默认数据源已覆盖，通常不需要）
+WECHAT_API_KEY=            # 可选，极速数据第三方微信搜索（默认数据源已覆盖）
 BAIDU_API_KEY=             # 可选，两个都配齐才会启用百度源
 BAIDU_SECRET_KEY=
 ```

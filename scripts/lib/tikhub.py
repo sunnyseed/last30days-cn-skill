@@ -16,6 +16,7 @@ TikHub（api.tikhub.io）是第三方社媒数据聚合商，$0.001/次、非 20
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -23,7 +24,18 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
-BASE = "https://api.tikhub.io"
+def _base() -> str:
+    """数据源地址。默认直连上游；设 L30D_BASE_URL 可改指向自建转发层。
+
+    默认值必须保持上游官方地址——本仓库是公开的，把某个私有转发层写成默认值
+    等于让陌生人往那个端点上打。团队用法是各自设 L30D_BASE_URL。
+    """
+    return (os.environ.get("L30D_BASE_URL")
+            or os.environ.get("TIKHUB_BASE_URL")  # 旧名，仍接受
+            or "https://api.tikhub.io").rstrip("/")
+
+
+BASE = _base()  # 兼容旧引用；实际请求走 _base()，见下
 _UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
 _TIMEOUT = 45
 _RETRIES = 3
@@ -31,7 +43,7 @@ _RETRIES = 3
 
 def _request(path: str, key: str, *, params: Optional[Dict[str, Any]] = None,
              body: Optional[Dict[str, Any]] = None, tag: str = "") -> Optional[Dict[str, Any]]:
-    url = f"{BASE}{path}"
+    url = f"{_base()}{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
     payload = json.dumps(body).encode("utf-8") if body is not None else None

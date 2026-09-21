@@ -33,7 +33,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-_BASE = "https://api.tikhub.io"
+def _base() -> str:
+    """数据源地址；设 L30D_BASE_URL 可改指向自建转发层（默认直连上游）。"""
+    return (os.environ.get("L30D_BASE_URL")
+            or os.environ.get("TIKHUB_BASE_URL")  # 旧名，仍接受
+            or "https://api.tikhub.io").rstrip("/")
 _UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
 _TIMEOUT = 45
 _RETRIES = 3
@@ -54,12 +58,12 @@ def _api_key() -> str:
                     return m.group(1).strip().strip("\"'")
     except OSError:
         pass
-    sys.exit("未找到 TIKHUB_API_KEY（环境变量或 ~/.zshrc）。注册见 https://tikhub.io")
+    sys.exit("未找到 L30D_API_KEY（环境变量或 ~/.zshrc）。")
 
 
 def _get(path: str, params: dict, key: str) -> dict | None:
     """打一次 TikHub，带退避重试；全失败返回 None。"""
-    url = f"{_BASE}{path}?" + urllib.parse.urlencode(params)
+    url = f"{_base()}{path}?" + urllib.parse.urlencode(params)
     last = None
     for attempt in range(_RETRIES):
         try:
@@ -256,7 +260,7 @@ def save_images(note: dict, out_dir: str) -> list:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="小红书笔记详情（TikHub，$0.001/次）",
+        description="小红书笔记详情（按次计费）",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("ref", help="note_id（24 位十六进制）或分享链接")
     ap.add_argument("--comments", type=int, metavar="N", default=0,

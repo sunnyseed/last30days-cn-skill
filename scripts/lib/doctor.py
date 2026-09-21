@@ -52,7 +52,7 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "微博",
         "ok" if weibo_ok else "warn",
         weibo_ok,
-        ("TikHub 高级搜索可用（支持任意时间区间）" if config.get("TIKHUB_API_KEY") else "已配置 API token 或 Playwright 可用") if weibo_ok else "未配置微博 API，且 Playwright 不可用；仍会尝试移动端公开接口" + browser_hint,
+        ("数据源高级搜索可用（支持任意时间区间）" if config.get("TIKHUB_API_KEY") else "已配置 API token 或 Playwright 可用") if weibo_ok else "未配置微博 API，且 Playwright 不可用；仍会尝试移动端公开接口" + browser_hint,
         "安装 Playwright 或配置 WEIBO_ACCESS_TOKEN 可提高稳定性；旧 macOS 可改用系统浏览器",
         "python -m pip install playwright && python -m playwright install chromium",
     ))
@@ -75,10 +75,10 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "B站",
         "ok" if bilibili_ok else ("warn" if has_playwright else "error"),
         env.is_bilibili_available(config),
-        "TikHub 综合搜索可用" if bilibili_tikhub else (
+        "数据源综合搜索可用" if bilibili_tikhub else (
             "公开搜索 API 可用" if bilibili_ok else
             "公开搜索 API 探测失败" + ("；可尝试 Playwright 兜底" if has_playwright else "；且 Playwright 不可用")),
-        "配置 TIKHUB_API_KEY（推荐，支持发布时间区间）或安装 Playwright",
+        "配置 L30D_API_KEY（推荐，支持发布时间区间）或安装 Playwright",
         "python -m pip install playwright && python -m playwright install chromium",
     ))
 
@@ -90,7 +90,7 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "ok" if zhihu_ok and zhihu_available else ("warn" if zhihu_available else "error"),
         zhihu_available,
         "公开搜索 API 可用" if zhihu_ok else
-        "知乎公开 API 探测失败（search_v3 400 / 热榜 401）；**TikHub 无知乎综合搜索**，"
+        "知乎公开 API 探测失败（search_v3 400 / 热榜 401）；**数据源无知乎综合搜索**，"
         "无 ZHIHU_COOKIE 且无 Playwright，该源已标为不可用、不再参与检索",
         "配置 ZHIHU_COOKIE 或安装 Playwright；否则该源不会跑",
         "python -m pip install playwright && python -m playwright install chromium",
@@ -102,8 +102,8 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "抖音",
         "ok" if douyin_ok else "warn",
         douyin_ok,
-        ("TikHub 视频搜索可用（最新发布排序 + 时间筛选）" if config.get("TIKHUB_API_KEY") else "已配置抖音 API 或 Playwright 可用") if douyin_ok else "未配置 API 且 Playwright 不可用；会尝试公开接口/搜索兜底",
-        "配置 TIKHUB_API_KEY 或安装 Playwright",
+        ("数据源视频搜索可用（最新发布排序 + 时间筛选）" if config.get("TIKHUB_API_KEY") else "已配置抖音 API 或 Playwright 可用") if douyin_ok else "未配置 API 且 Playwright 不可用；会尝试公开接口/搜索兜底",
+        "配置 L30D_API_KEY 或安装 Playwright",
         "python -m pip install playwright && python -m playwright install chromium",
     ))
 
@@ -113,7 +113,7 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "微信公众号",
         "ok" if wechat_ok else "warn",
         wechat_ok,
-        ("TikHub 微信搜一搜可用" if config.get("TIKHUB_API_KEY") else "已配置 WECHAT_API_KEY") if wechat_ok else "未配置 WECHAT_API_KEY；会尝试搜狗微信公开搜索",
+        ("数据源搜一搜可用" if config.get("TIKHUB_API_KEY") else "已配置 WECHAT_API_KEY") if wechat_ok else "未配置 WECHAT_API_KEY；会尝试搜狗微信公开搜索",
         "配置 WECHAT_API_KEY 可提高稳定性",
         "echo WECHAT_API_KEY=your_key >> ~/.config/last30days-cn/.env",
     ))
@@ -136,7 +136,7 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "ok" if toutiao_ok else "error",
         env.is_toutiao_available(config),
         "头条原生搜索接口可用" if toutiao_ok else
-        "原生接口被签名/风控限制，**TikHub 只有按 id 取详情、无搜索端点**，"
+        "原生接口被签名/风控限制，**数据源只有按 id 取详情、无搜索端点**，"
         "也无 key 可配；该源已标为不可用、不再参与检索",
         "暂无可行方案；用 --search baidu,wechat 做替代覆盖",
         "python scripts/last30days.py \"你的主题\" --search baidu,wechat",

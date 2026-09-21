@@ -106,6 +106,16 @@ def get_config() -> Dict[str, Any]:
     for key, default in keys:
         config[key] = os.environ.get(key) or merged_env.get(key, default)
 
+    # 中性别名：文档只写 L30D_API_KEY，内部仍统一用 TIKHUB_API_KEY 这个键，
+    # 免得 is_source_available 等一堆判断跟着改。旧名仍接受，避免弄挂已有配置。
+    # 顺序照引擎既有规则：进程环境 > 配置文件；同一层内新名优先。
+    config["TIKHUB_API_KEY"] = (
+        os.environ.get("L30D_API_KEY")
+        or os.environ.get("TIKHUB_API_KEY")
+        or merged_env.get("L30D_API_KEY")
+        or merged_env.get("TIKHUB_API_KEY")
+    )
+
     if project_env_path:
         config["_CONFIG_SOURCE"] = f"project:{project_env_path}"
     elif CONFIG_FILE and CONFIG_FILE.exists():
@@ -398,7 +408,7 @@ def get_missing_keys(config: Dict[str, Any]) -> str:
     if not config.get("WEIBO_ACCESS_TOKEN"):
         lines.append("WEIBO_ACCESS_TOKEN（微博）")
     if not config.get("TIKHUB_API_KEY"):
-        lines.append("TIKHUB_API_KEY（抖音 / 小红书）")
+        lines.append("L30D_API_KEY（抖音 / 小红书）")
     if not config.get("ZHIHU_COOKIE"):
         lines.append("ZHIHU_COOKIE")
     if not config.get("WECHAT_API_KEY"):

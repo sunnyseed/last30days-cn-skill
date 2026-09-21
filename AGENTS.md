@@ -21,7 +21,7 @@ grep -rn "openrouter\|api.openai\|generativelanguage" scripts/ tools/
 # 无输出
 ```
 
-唯一的外部依赖是 **TikHub**（数据源，不是模型）。因此：
+唯一的外部依赖是**数据源服务**（不是模型）。因此：
 
 - **成本恒定且只有一项**：一次默认检索 $0.005~0.015，无模型费。
 - **行为可复现**：排序是死公式 `0.45×相关性 + 0.25×新鲜度 + 0.30×互动`，
@@ -82,10 +82,15 @@ rerank_with_your_own_model()
 ### 2. 配 key
 
 ```bash
-export TIKHUB_API_KEY=your_key
+export L30D_API_KEY=your_key
 ```
 
-注册 https://tikhub.io 。$0.001/次，**非 200 不计费**，注册送额度够跑几十次。
+key 从哪来：团队用户向转发层管理员索取（同时会给你一个 `L30D_BASE_URL`，
+届时你不需要注册任何账号）；自己装的话见 `README.md` 的「依赖」一节。
+
+```bash
+export L30D_BASE_URL=https://…   # 仅团队用户需要；留空则直连默认数据源
+```
 
 也可写配置文件（优先级：进程环境 > 项目 `.claude/last30days-cn.env` > 全局
 `~/.config/last30days-cn/.env`，后两者权限须 600）。
@@ -109,7 +114,7 @@ import subprocess, os, json
 out = subprocess.run(
     ["python3", "scripts/last30days.py", topic, "--emit", "json"],
     capture_output=True, text=True, timeout=300,
-    env={**os.environ, "TIKHUB_API_KEY": key},
+    env={**os.environ, "L30D_API_KEY": key},
 )
 data = json.loads(out.stdout)
 ```
@@ -161,9 +166,9 @@ data = json.loads(out.stdout)
 
 | 源 | 状态 | 原因 |
 |---|---|---|
-| 微博 / 小红书 / B站 / 微信 / 抖音 | ✅ 有 TikHub key 即可用 | — |
-| 知乎 | ❌ 除非配 `ZHIHU_COOKIE` 或装 Playwright | TikHub 只有分类搜索，无综合搜索 |
-| 今日头条 | ❌ 恒不可用 | TikHub 只有按 id 取详情，无搜索端点 |
+| 微博 / 小红书 / B站 / 微信 / 抖音 | ✅ 有 数据源 key 即可用 | — |
+| 知乎 | ❌ 除非配 `ZHIHU_COOKIE` 或装 Playwright | 数据源 只有分类搜索，无综合搜索 |
+| 今日头条 | ❌ 恒不可用 | 数据源只有按 id 取详情，无搜索端点 |
 | 百度 | ⚠️ 抓页时灵时不灵 | 常被安全验证拦 |
 
 显式 `--search zhihu` 也照样被拦。确需强跑：`LAST30DAYS_FORCE_SOURCES=1`
@@ -185,7 +190,7 @@ for t in tests/test_*.py; do python3 "$t" >/dev/null 2>&1 \
   && echo "PASS $t" || echo "FAIL $t"; done
 ```
 
-fixture 是**实测响应裁到 2 条**。为什么必须拿真实结构跑：TikHub 的 OpenAPI 把
+fixture 是**实测响应裁到 2 条**。为什么必须拿真实结构跑：数据源的 OpenAPI 把
 1063 个端点的 200 响应全标成同一个通用 `ResponseModel`，字段没有任何约定。
 照文档写解析必错。
 
@@ -193,11 +198,11 @@ fixture 是**实测响应裁到 2 条**。为什么必须拿真实结构跑：Ti
 
 ## 已知边界
 
-- **响应时间抖动 2s~30s+**（TikHub 上游，B站见过 34s）。引擎内置 45s 超时 +
+- **响应时间抖动 2s~30s+**（数据源上游，B站见过 34s）。引擎内置 45s 超时 +
   3 次退避重试（超时不计费，重试免费）。**微博是最慢的源**，单页 10~30s，
   引擎对每源有 60s 硬超时，故微博额外压了 40s 翻页预算——宁可少翻一页，
   也不要整源超时归零。
-- **所有 TikHub 请求必带 UA**，不带会被它前面的 Cloudflare 拦成 `403 error code 1010`。
+- **所有数据源请求必带 UA**，不带会被数据源前面的 Cloudflare 拦成 `403 error code 1010`。
   自己扩端点时别忘了。
 - **失败结果也会进缓存**。调试时不带 `--refresh`，你会一直看到上一次的空结果。
 - **一次默认检索约 5~15 次调用**，$0.005~0.015。

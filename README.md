@@ -1,10 +1,10 @@
-# last30days-cn (TikHub 版) v3.3.0-cn-tikhub
+# last30days-cn (数据源 版) v3.3.0-cn-tikhub
 
 中文平台舆情检索引擎。给定一个话题，从**微博、小红书、B站、微信公众号、抖音**拉回最近 N 天的真实讨论，
 带发布时间、作者、互动数和原链接，输出给 agent 做归纳。
 
 **零 LLM 调用。** 不连 OpenRouter，不连 OpenAI / Anthropic / Gemini，不读任何模型 API key。
-拆查询、重排序、归纳——都是装载方（你的 agent）自己的活。因此成本只有 TikHub 一项、
+拆查询、重排序、归纳——都是装载方（你的 agent）自己的活。因此成本只有 数据源 一项、
 排序是可复现的死公式、没有静默降级的模型调用。自己验：
 
 ```bash
@@ -16,11 +16,11 @@ grep -rn "openrouter\|api.openai\|generativelanguage" scripts/ tools/   # 无输
 > 不能捆多个、不能带标点、`最新/推荐/教程` 这类词相关性打分为零。
 
 基于 [Jesseovo/last30days-skill-cn](https://github.com/Jesseovo/last30days-skill-cn) v3.2.0 修改，
-改动见 `CHANGELOG-tikhub.md`。
+改动见 `CHANGELOG.md`。
 
 ## 它和上游的核心区别
 
-**五个源改走 TikHub**，因此时间窗是在**服务端**筛选的，拿回来的每条都带真实发布时间戳：
+**五个源改走统一数据源**，因此时间窗是在**服务端**筛选的，拿回来的每条都带真实发布时间戳：
 
 | 源 | 时间筛选能力 |
 |---|---|
@@ -35,8 +35,12 @@ grep -rn "openrouter\|api.openai\|generativelanguage" scripts/ tools/   # 无输
 ## 依赖
 
 - **Python 3.9+，无第三方依赖**（纯标准库）
-- **一个 TikHub API key** —— 这是主要依赖。没有它，微博/小红书/微信/抖音四个源都会被判为不可用。
-  注册 https://tikhub.io ，$0.001/次、非 200 不计费，注册送额度够跑几十次。
+- **一个数据源 API key** —— 这是主要依赖。没有它，微博/小红书/微信/抖音四个源都会被判为不可用。
+  两种取法，二选一：
+  - **团队用户**：向你所在团队的转发层管理员要一个 key，同时拿到 `L30D_BASE_URL`。
+    这样你不需要自己注册任何账号。
+  - **自己装**：本项目默认上游是 [TikHub](https://tikhub.io)（$0.001/次、非 200 不计费，
+    注册送额度够跑几十次）。注册后把 key 填进 `L30D_API_KEY`，`L30D_BASE_URL` 留空即可。
 
 可选：`pip install playwright && playwright install chromium` 启用爬虫模式（可让知乎等源恢复可用）；
 `pip install jieba` 改善中文分词（否则退回 CJK bigram）。
@@ -53,7 +57,7 @@ unzip last30days-cn-tikhub-3.3.0.zip -d <你的技能目录>/
 
 ```bash
 # 1. 进程环境变量（最简单，也适合容器/CI）
-export TIKHUB_API_KEY=your_key
+export L30D_API_KEY=your_key
 
 # 2. 全局配置文件
 mkdir -p ~/.config/last30days-cn
@@ -100,7 +104,7 @@ import subprocess, os
 out = subprocess.run(
     ["python3", "scripts/last30days.py", topic, "--emit", "compact"],
     capture_output=True, text=True, timeout=300,
-    env={**os.environ, "TIKHUB_API_KEY": key},
+    env={**os.environ, "L30D_API_KEY": key},
 ).stdout
 ```
 
@@ -139,7 +143,7 @@ python3 tests/test_tikhub_sources.py        # 四源解析回归（桩掉网络�
 python3 tests/test_xiaohongshu_tikhub.py    # 小红书链路回归
 ```
 
-fixture 是**实测响应**裁到 2 条——TikHub 的 OpenAPI 把 1063 个端点的 200 响应全标成同一个通用
+fixture 是**实测响应**裁到 2 条——数据源的 OpenAPI 把 1063 个端点的 200 响应全标成同一个通用
 `ResponseModel`，字段没有任何约定，所以回归必须拿真实结构跑。
 
 全量 23 个测试**都能用 `python3` 直接跑，不需要 pytest**，且全部离线：
@@ -162,13 +166,13 @@ python3 tools/xhs_note.py <note_id|分享链接> [--comments 30] [--images]
 
 ## 已知边界
 
-- **响应时间抖动**：TikHub 上游 2s~30s+ 不等，B站见过 34s。引擎内置 45s 超时 + 3 次退避重试
+- **响应时间抖动**：数据源上游 2s~30s+ 不等，B站见过 34s。引擎内置 45s 超时 + 3 次退避重试
   （超时不计费，重试免费），但微博单页最慢，引擎对每个源有 60s 硬超时，故微博额外压了 40s 的
   翻页时间预算，宁可少翻一页也不整源超时。
-- **必带 UA**：所有 TikHub 请求都带 UA，不带会被它前面的 Cloudflare 拦成 `403 error code 1010`。
+- **必带 UA**：所有数据源请求都带 UA，不带会被数据源前面的 Cloudflare 拦成 `403 error code 1010`。
   自己扩端点时别忘了。
-- **知乎无解**：TikHub 只有文章/专栏/话题分类搜索，没有综合搜索，要接得自己拼几个端点。
-- **头条无解**：TikHub 只有按 id 取详情，没有搜索端点。
+- **知乎无解**：数据源只有文章/专栏/话题分类搜索，没有综合搜索，要接得自己拼几个端点。
+- **头条无解**：数据源只有按 id 取详情，没有搜索端点。
 - **百度**：抓页时灵时不灵（会被安全验证拦），配齐 `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` 才启用。
 - **成本**：一次默认检索约 5~15 次调用，$0.005~0.015。
 
