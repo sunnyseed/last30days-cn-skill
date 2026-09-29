@@ -279,6 +279,9 @@ def main() -> None:
         sys.exit(1)
 
     if args.json:
+        # MCP 走的就是 --json；原先在这里直接 return，--comments 被静默丢掉
+        if args.comments:
+            note["_comments"] = fetch_comments(args.ref, key, args.comments)
         print(json.dumps(note, ensure_ascii=False, indent=2))
         return
 
