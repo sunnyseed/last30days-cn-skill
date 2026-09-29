@@ -5,8 +5,8 @@
 一览表」笔记的干货**全在配图里**，正文往往只有一句引子。要读到表，必须再打一
 次详情接口拿 images_list，把原图下下来转成可读格式。
 
-数据源：TikHub（api.tikhub.io，$0.001/次，非 200 不计费），key 取自环境变量
-TIKHUB_API_KEY，取不到则从 ~/.zshrc 抽（与 run_alert.sh 同法，给 launchd 留路）。
+数据源：TikHub（经 L30D_BASE_URL 指向的转发层，$0.001/次，非 200 不计费），key 取自
+环境变量 L30D_API_KEY（旧名 TIKHUB_API_KEY 仍接受），取不到则从 ~/.zshrc 抽。
 纯标准库；转图用 macOS 自带 sips。
 
 用法：
@@ -46,14 +46,17 @@ _IMG_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.xiaohongshu
 
 
 def _api_key() -> str:
-    key = os.environ.get("TIKHUB_API_KEY")
-    if key:
-        return key
+    # 新名在前；旧名 TIKHUB_API_KEY 仍接受，与 lib/tikhub.py 一致。
+    # MCP server 只往子进程注入 L30D_API_KEY，漏读新名它就一定拿不到 key。
+    for name in ("L30D_API_KEY", "TIKHUB_API_KEY"):
+        key = os.environ.get(name)
+        if key:
+            return key
     zshrc = os.path.expanduser("~/.zshrc")
     try:
         with open(zshrc, encoding="utf-8") as f:
             for line in f:
-                m = re.match(r"\s*(?:export\s+)?TIKHUB_API_KEY=(.+)", line)
+                m = re.match(r"\s*(?:export\s+)?(?:L30D|TIKHUB)_API_KEY=(.+)", line)
                 if m:
                     return m.group(1).strip().strip("\"'")
     except OSError:
