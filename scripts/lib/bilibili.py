@@ -21,6 +21,10 @@ from . import dates, relevance, tikhub
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 _TIKHUB_PATH = "/api/v1/bilibili/web/fetch_general_search"
+# 排序（2026-10-05 起）：不论时间窗多长，一律用平台的「综合/最热」，不用「最新」。
+# 原因：各源只取前 ~20 条，按「最新」排时热门话题一两天就填满，30 天窗实测只覆盖
+# 最近 1~4 天（B站、微博只剩当天），窗口形同虚设。时间范围仍由服务端参数 + 引擎日期过滤保证。
+_TIKHUB_SORT = "totalrank"  # 综合（order 必填，漏了 422）
 
 
 def search_bilibili(
@@ -90,8 +94,8 @@ def _search_via_tikhub(
     """B站综合搜索（TikHub）。
 
     `pubtime_begin_s`/`pubtime_end_s` 是 10 位时间戳区间，直接把 30 天窗压到
-    服务端。`order` 是必填（漏了返 422），用 pubdate＝按发布时间倒序，舆情场景
-    要的是新内容而非播放量最高的老视频。
+    服务端。`order` 是必填（漏了返 422）。原用 pubdate（最新），2026-10-05 起改 totalrank（综合）：
+    老视频已被 pubtime 区间挡在窗外，按最新排只会让 30 天窗退化成「今天」。
 
     返回结构与 B站网页版搜索 API 完全一致（TikHub 只是代理），故复用 _parse_video。
     """
@@ -105,7 +109,7 @@ def _search_via_tikhub(
     for page in range(1, pages + 1):
         params = {
             "keyword": topic,
-            "order": "pubdate",
+            "order": _TIKHUB_SORT,
             "page": page,
             "page_size": 20,
             "pubtime_begin_s": begin,

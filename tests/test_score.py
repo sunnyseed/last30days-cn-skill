@@ -69,6 +69,31 @@ class TestScoreBilibiliItems(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class TestScoreWechatItems(unittest.TestCase):
+    """2026-10-05：微信不再套网页搜索类的「按查询类型扣分 + 确切日期 +10」。"""
+
+    def _item(self, conf="high"):
+        return schema.WechatItem(id="WX1", title="t", snippet="", url="", source_name="号",
+                                 date="2026-10-05", date_confidence=conf, relevance=0.8)
+
+    def test_score_independent_of_query_type(self):
+        """**回归**：原先 opinion/product 扣 15、concept 扣 0，同一篇文章分差 15。"""
+        got = {qt: score.score_wechat_items([self._item()], query_type=qt)[0].score
+               for qt in ["concept", "opinion", "product", "breaking_news", None]}
+        self.assertEqual(len(set(got.values())), 1, got)
+
+    def test_no_websearch_bonus_or_penalty(self):
+        it = score.score_wechat_items([self._item()])[0]
+        expected = int(score.WEBSEARCH_WEIGHT_RELEVANCE * it.subs.relevance
+                       + score.WEBSEARCH_WEIGHT_RECENCY * it.subs.recency)
+        self.assertEqual(it.score, expected)
+
+    def test_low_date_confidence_same_as_social(self):
+        hi = score.score_wechat_items([self._item("high")])[0].score
+        lo = score.score_wechat_items([self._item("low")])[0].score
+        self.assertEqual(hi - lo, 5)
+
+
 class TestScoreWeiboItems(unittest.TestCase):
     def test_basic_scoring(self):
         items = [

@@ -19,6 +19,10 @@ from typing import Any, Dict, List, Optional
 from . import dates, relevance, tikhub
 
 _TIKHUB_PATH = "/api/v1/douyin/search/fetch_video_search_v1"
+# 排序（2026-10-05 起）：不论时间窗多长，一律用平台的「综合/最热」，不用「最新」。
+# 原因：各源只取前 ~20 条，按「最新」排时热门话题一两天就填满，30 天窗实测只覆盖
+# 最近 1~4 天（B站、微博只剩当天），窗口形同虚设。时间范围仍由服务端参数 + 引擎日期过滤保证。
+_TIKHUB_SORT = "0"  # 综合
 _TIKHUB_MAX_PAGES = 3
 
 _UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
@@ -88,7 +92,7 @@ def _search_via_tikhub(
 
     原先打的 `douyin/web/fetch_general_search` **该端点已不存在**（TikHub 现行
     OpenAPI 里没有，必 404），抖音搜索全部迁到了 `douyin/search/*` 且是 POST。
-    这里用 video_search_v1：它比 v3/v5 多两个关键参数——`sort_type=2` 最新发布、
+    这里用 video_search_v1：它比 v3/v5 多两个关键参数——`sort_type`（0综合/1最多点赞/2最新，现用 0）、
     `publish_time` 发布时间筛选（0不限/1一天/7一周/180半年），正是舆情要的。
     翻页用响应回传的 cursor + search_id + backtrace 三件套。
     """
@@ -96,7 +100,7 @@ def _search_via_tikhub(
     # 一天档（"1"）**不用**：2026-10-05 实测上游对 publish_time=1 时好时坏，
     # 同一组参数一分钟前 200、一分钟后 400「Request failed. Please retry」，
     # 与 sort_type 无关；一周档 12/12 成功。Grok Bot 日报跑 --days 1，
-    # 用一天档等于抖音隔三差五整源 0 条。改用一周档 + sort_type=2（最新优先），
+    # 用一天档等于抖音隔三差五整源 0 条。改用一周档（排序见 _TIKHUB_SORT），
     # 由引擎的日期过滤收窄到真实窗口——与「>7 天用半年档」同一个宁多勿少的原则。
     publish_time = tikhub.bucket(from_date, to_date, "7", "7", "180")
     cursor, search_id, backtrace = 0, "", ""
@@ -104,7 +108,7 @@ def _search_via_tikhub(
         body = {
             "keyword": topic,
             "cursor": cursor,
-            "sort_type": "2",
+            "sort_type": _TIKHUB_SORT,
             "publish_time": publish_time,
             "content_type": "0",
             "search_id": search_id,
@@ -122,6 +126,8 @@ def _search_via_tikhub(
             if not aweme.get("aweme_id"):
                 continue  # 搜索结果里混着话题卡/用户卡，没 aweme_id 的直接跳过
             item = _parse_aweme(aweme)
+            if not tikhub.in_window(item.get("date"), from_date, to_date):
+                continue  # 档位比窗口宽（1 天窗用一周档），窗外的不占名额
             item["source"] = "tikhub"
             items.append(item)
         if len(items) >= limit or not data.get("has_more"):

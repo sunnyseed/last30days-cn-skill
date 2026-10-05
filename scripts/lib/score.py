@@ -329,9 +329,17 @@ def score_toutiao_items(items: List[schema.ToutiaoItem]) -> List[schema.ToutiaoI
 
 def score_wechat_items(
     items: List[schema.WechatItem],
-    query_type: QueryType = None,
+    query_type: QueryType = None,  # noqa: ARG001 — 保留签名，调用方仍会传
 ) -> List[schema.WechatItem]:
-    """Relevance + recency only (WebSearch-style); no engagement data."""
+    """相关性 + 新鲜度（拿不到互动数），**不再套网页搜索类的扣分/加分**（2026-10-05）。
+
+    原先与百度共用 WebSearch 公式：按查询类型扣 0~15 分、有确切日期再 +10。
+    那是英文版给「没有互动、证明不了有人看」的网页结果设的。现在微信走搜一搜
+    且按「最热」（点赞降序）取数，进来的已是平台筛过的高互动文章，固定扣分是
+    重复惩罚；而只删扣分留着 +10 又会反过来压过社交源（社交源没有这项加分）。
+    所以两项一起去掉，日期可信度按社交源同一套 _apply_date_confidence_penalty。
+    权重仍是 0.55/0.45（两项合计 1，与社交源三项合计 1 同尺度）。
+    """
     if not items:
         return items
     for item in items:
@@ -339,16 +347,7 @@ def score_wechat_items(
         rec_score = dates.recency_score(item.date)
         item.subs = schema.SubScores(relevance=rel_score, recency=rec_score, engagement=0)
         overall = WEBSEARCH_WEIGHT_RELEVANCE * rel_score + WEBSEARCH_WEIGHT_RECENCY * rec_score
-        penalty = (
-            WEBSEARCH_PENALTY_BY_TYPE.get(query_type, WEBSEARCH_SOURCE_PENALTY)
-            if query_type
-            else WEBSEARCH_SOURCE_PENALTY
-        )
-        overall -= penalty
-        if item.date_confidence == "high":
-            overall += WEBSEARCH_VERIFIED_BONUS
-        elif item.date_confidence == "low":
-            overall -= WEBSEARCH_NO_DATE_PENALTY
+        overall = _apply_date_confidence_penalty(overall, item)
         item.score = max(0, min(100, int(overall)))
     return items
 

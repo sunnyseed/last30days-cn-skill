@@ -32,6 +32,10 @@ _DESKTOP_UA = (
 _SCRAPECREATORS_DEPRECATION_WARNED = False
 
 _TIKHUB_PATH = "/api/v1/xiaohongshu/app_v2/search_notes"
+# 排序（2026-10-05 起）：不论时间窗多长，一律用平台的「综合/最热」，不用「最新」。
+# 原因：各源只取前 ~20 条，按「最新」排时热门话题一两天就填满，30 天窗实测只覆盖
+# 最近 1~4 天（B站、微博只剩当天），窗口形同虚设。时间范围仍由服务端参数 + 引擎日期过滤保证。
+_TIKHUB_SORT = "general"  # 综合
 # 每页约 20 条，深度模式最多 40 条；封顶 3 页以免翻页把 $0.001/次 叠上去
 _TIKHUB_MAX_PAGES = 3
 
@@ -131,7 +135,7 @@ def _search_via_tikhub(
         params = {
             "keyword": topic,
             "page": str(page),
-            "sort_type": "time_descending",
+            "sort_type": _TIKHUB_SORT,
             "note_type": "不限",
             "time_filter": time_filter,
         }
@@ -153,6 +157,8 @@ def _search_via_tikhub(
             break
         for note in notes:
             parsed = _parse_note(note)
+            if not tikhub.in_window(parsed.get("date"), from_date, to_date):
+                continue  # 30 天窗用半年档 + 综合排序，窗外的不占名额
             if parsed.get("url") or parsed.get("title"):
                 parsed["source"] = "tikhub"
                 items.append(parsed)

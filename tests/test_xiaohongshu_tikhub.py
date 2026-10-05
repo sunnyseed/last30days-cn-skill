@@ -36,7 +36,8 @@ def fake_urlopen(req, timeout=None):
 urllib.request.urlopen = fake_urlopen
 x.urllib.request.urlopen = fake_urlopen
 
-items = x.search_xiaohongshu("纳指100", "2026-08-15", "2026-09-14", depth="default", tikhub_token="TESTKEY")
+# fixture 时间戳是 2025-09-12/13；窗口须覆盖它（2026-10-05 起翻页时就丢窗外条目）
+items = x.search_xiaohongshu("纳指100", "2025-08-15", "2025-09-14", depth="default", tikhub_token="TESTKEY")
 print("requests:", len(calls))
 print(calls[0])
 print(json.dumps(items, ensure_ascii=False, indent=2)[:1200])
@@ -45,4 +46,10 @@ assert items[0]["date"] and items[1]["date"], "时间字段没解析出来"
 assert items[0]["engagement"]["likes"] == 1234
 assert items[0]["url"].endswith("697c0eee000000000a03c308")
 assert "time_filter=%E5%8D%8A%E5%B9%B4%E5%86%85" in calls[0], calls[0]
+assert "sort_type=general" in calls[0], "小红书用综合排序，不用 time_descending"
+
+# 回归（2026-10-05）：窗外条目在源内就丢掉，不占名额
+calls.clear()
+assert x.search_xiaohongshu("纳指100", "2026-08-15", "2026-09-14", depth="default",
+                            tikhub_token="TESTKEY") == [], "窗外条目不该进结果"
 print("PASS")

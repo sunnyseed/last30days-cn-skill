@@ -123,6 +123,19 @@ def span_days(from_date: str, to_date: str, default: int = 30) -> int:
         return default
 
 
+def in_window(date: Optional[str], from_date: str, to_date: str) -> bool:
+    """条目日期是否落在窗口内（YYYY-MM-DD 字符串比较）。没日期的放行，交给引擎判。
+
+    档位制的源（小红书/抖音/微信）拿到的是比窗口宽的档（30 天窗用半年档），
+    又按「综合/最热」排，窗外的老爆款会排在前面。若先按条数截断再交引擎过滤，
+    名额全被窗外条目占掉——2026-10-05 实测微信半年档+最热首页 36 条里只有 10 条在 30 天内，
+    截到 15 条后只剩 5 条。所以翻页时就丢掉窗外条目，名额只算窗内的。
+    """
+    if not date:
+        return True
+    return from_date <= date[:10] <= to_date
+
+
 def bucket(from_date: str, to_date: str, day: Any, week: Any, half_year: Any) -> Any:
     """把日期窗口套进「一天/一周/半年」三档——多数平台只给这三个档位。
 

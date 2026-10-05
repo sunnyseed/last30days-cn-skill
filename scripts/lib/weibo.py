@@ -23,6 +23,10 @@ from . import dates, http, relevance, tikhub
 _UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
 
 _TIKHUB_PATH = "/api/v1/weibo/web_v2/fetch_advanced_search"
+# 排序（2026-10-05 起）：不论时间窗多长，一律用平台的「综合/最热」，不用「最新」。
+# 原因：各源只取前 ~20 条，按「最新」排时热门话题一两天就填满，30 天窗实测只覆盖
+# 最近 1~4 天（B站、微博只剩当天），窗口形同虚设。时间范围仍由服务端参数 + 引擎日期过滤保证。
+_TIKHUB_SORT = "hot"  # 热门（微博无「综合」档；all 按时间倒序）
 # 每页约 10 条。**单页实测 10~30s**（微博高级搜索是四个源里最慢的），而引擎对
 # 每个源有 60s 硬超时、超时即整源丢光（实测 5 页=70s 拿到 31 条全丢、2 页也超）。
 # 故除页数上限外还压一道**时间预算**：只有已用时明显够再翻一页才继续。
@@ -111,7 +115,7 @@ def _search_via_tikhub(
             break
         params = {
             "q": topic,
-            "search_type": "all",
+            "search_type": _TIKHUB_SORT,
             "timescope": f"custom:{from_date}:{to_date}",
             "page": page,
         }

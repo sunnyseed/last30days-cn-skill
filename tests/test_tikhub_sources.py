@@ -50,26 +50,37 @@ print("TikHub 源解析回归：")
 calls = check("微博", weibo, _fixture("weibo"),
               lambda: weibo._search_via_tikhub("纳指100", FROM, TO, 10, "K"))
 assert calls[0][1]["timescope"] == f"custom:{FROM}:{TO}", "微博没把 30 天窗压到服务端"
+assert calls[0][1]["search_type"] == "hot", "微博用热门（all 按时间倒序，30 天窗会退化成当天）"
 
 calls = check("B站", bilibili, _fixture("bilibili"),
               lambda: bilibili._search_via_tikhub("纳指100", FROM, TO, 10, 1, "K"))
-assert calls[0][1]["order"] == "pubdate", "B站 order 必填且应按发布时间"
+assert calls[0][1]["order"] == "totalrank", "B站 order 必填，用综合排序"
 assert calls[0][1]["pubtime_begin_s"] > 0 and calls[0][1]["pubtime_end_s"] > calls[0][1]["pubtime_begin_s"]
 
 calls = check("微信", wechat, _fixture("wechat"),
               lambda: wechat._search_via_tikhub("纳指100", FROM, TO, 10, "K"))
 assert calls[0][1]["publish_time"] == "half_year", "30 天窗应落到半年档再由引擎收窄"
-assert calls[0][1]["sort"] == "latest"
+assert calls[0][1]["sort"] == "hot", "微信用最热"
 
 calls = check("抖音", douyin, _fixture("douyin"),
               lambda: douyin._search_via_tikhub("纳指100", FROM, TO, 10, "K"))
 assert calls[0][0].endswith("fetch_video_search_v1"), "旧的 web/fetch_general_search 端点已下线"
-assert calls[0][1]["sort_type"] == "2" and calls[0][1]["publish_time"] == "180"
+assert calls[0][1]["sort_type"] == "0" and calls[0][1]["publish_time"] == "180", "抖音用综合排序"
 
 # 回归（2026-10-05）：抖音一天档上游时好时坏（400 Please retry），1 天窗必须用一周档
 calls = check("抖音 1 天窗", douyin, _fixture("douyin"),
-              lambda: douyin._search_via_tikhub("纳指100", TO, TO, 10, "K"))
+              lambda: douyin._search_via_tikhub("纳指100", "2026-09-12", "2026-09-12", 10, "K"),
+              expect_min=1)
 assert calls[0][1]["publish_time"] == "7", "1 天窗应落到一周档、由引擎收窄，别用不稳的一天档"
+
+# 窗口过滤（2026-10-05）：档位比窗口宽 + 综合/最热排序时，窗外老条目不能占名额
+assert tikhub.in_window("2026-09-12", "2026-09-12", "2026-09-12")
+assert not tikhub.in_window("2026-08-01", "2026-09-05", "2026-10-05")
+assert tikhub.in_window(None, "2026-09-05", "2026-10-05"), "没日期的放行，交给引擎判"
+tikhub.post = _stub(_fixture("wechat"), [])
+assert wechat._search_via_tikhub("纳指100", "2027-01-01", "2027-01-30", 10, "K") == [], \
+    "窗外条目不该进结果"
+print("  微信 窗外全丢: OK")
 
 # 分档边界：1 天窗不能拿半年档去查
 assert tikhub.bucket("2026-09-14", "2026-09-14", "d", "w", "h") == "d"

@@ -21,6 +21,10 @@ from . import dates, relevance, tikhub
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 _TIKHUB_PATH = "/api/v1/wechat_search/v2/fetch_search"
+# 排序（2026-10-05 起）：不论时间窗多长，一律用平台的「综合/最热」，不用「最新」。
+# 原因：各源只取前 ~20 条，按「最新」排时热门话题一两天就填满，30 天窗实测只覆盖
+# 最近 1~4 天（B站、微博只剩当天），窗口形同虚设。时间范围仍由服务端参数 + 引擎日期过滤保证。
+_TIKHUB_SORT = "hot"  # 最热（微信无「综合」；default 只按相关性）
 # 每页约 36 条；封顶 3 页，按次计费
 _TIKHUB_MAX_PAGES = 3
 
@@ -91,7 +95,7 @@ def _search_via_tikhub(
         body = {
             "keyword": topic,
             "business_type": "article",
-            "sort": "latest",
+            "sort": _TIKHUB_SORT,
             "publish_time": publish_time,
             "offset": 0,
             "raw": False,
@@ -105,7 +109,9 @@ def _search_via_tikhub(
         batch = data.get("items") or []
         if not batch:
             break
-        items.extend(_parse_tikhub_article(a) for a in batch)
+        # 30 天窗用半年档 + 最热排序，窗外的不占名额
+        items.extend(it for it in (_parse_tikhub_article(a) for a in batch)
+                     if tikhub.in_window(it.get("date"), from_date, to_date))
         cursor = str(data.get("cursor") or "")
         if len(items) >= limit or data.get("no_more") or not cursor:
             break
