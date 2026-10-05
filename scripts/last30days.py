@@ -291,10 +291,16 @@ def run_research(
     future_timeout = timeouts["future"]
 
     all_sources = {"weibo", "xiaohongshu", "bilibili", "zhihu", "douyin", "wechat", "baidu", "toutiao"}
+    # 不指定源时跑全部，由下面的可用性闸门挑掉没有真实数据路径的源。
+    # **不再按查询类型挑源**（qt.is_source_enabled / SOURCE_TIERS）：那张表来自英文版，
+    # 前提是「源又贵又不稳、要挑着跑」；在这里它只剩误伤——抖音只在 product 一格，
+    # 日常话题几乎判不成 product，于是 2026-09 起 hub 日报抖音天天 0 条；
+    # 带「部署」就判 how_to，微信也被悄悄丢掉。挑源的正确依据是闸门（有没有数据路径），
+    # 不是一组关键词正则。query_type 仍用于打分（百度/微信扣分、同分次序）。
     if search_sources:
         active = search_sources & all_sources
     else:
-        active = {s for s in all_sources if qt.is_source_enabled(s, query_type)}
+        active = set(all_sources)
 
     results = {src: {"items": [], "error": None} for src in all_sources}
 

@@ -66,6 +66,11 @@ calls = check("抖音", douyin, _fixture("douyin"),
 assert calls[0][0].endswith("fetch_video_search_v1"), "旧的 web/fetch_general_search 端点已下线"
 assert calls[0][1]["sort_type"] == "2" and calls[0][1]["publish_time"] == "180"
 
+# 回归（2026-10-05）：抖音一天档上游时好时坏（400 Please retry），1 天窗必须用一周档
+calls = check("抖音 1 天窗", douyin, _fixture("douyin"),
+              lambda: douyin._search_via_tikhub("纳指100", TO, TO, 10, "K"))
+assert calls[0][1]["publish_time"] == "7", "1 天窗应落到一周档、由引擎收窄，别用不稳的一天档"
+
 # 分档边界：1 天窗不能拿半年档去查
 assert tikhub.bucket("2026-09-14", "2026-09-14", "d", "w", "h") == "d"
 assert tikhub.bucket("2026-09-08", "2026-09-14", "d", "w", "h") == "w"

@@ -166,6 +166,9 @@ TIEBREAKER_BY_TYPE = {
 def is_source_enabled(source: str, query_type: QueryType, explicitly_requested: bool = False) -> bool:
     """Check if a source should run for a given query type.
 
+    **检索入口已不再调用它**（2026-10-05，见 last30days.py run_research）：
+    选源只看可用性闸门。保留函数仅为兼容旧测试/外部调用。
+
     Tier 1 and Tier 2 sources are enabled. Tier 3 (unlisted) sources only run
     if explicitly requested via --search flag.
     """

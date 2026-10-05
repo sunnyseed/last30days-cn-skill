@@ -123,8 +123,8 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "baidu",
         "百度",
         "ok" if baidu_api_ok else "warn",
-        True,
-        "已配置百度 API" if baidu_api_ok else "未配置百度 API；会使用公开搜索兜底",
+        env.is_baidu_available(config),
+        "已配置百度 API" if baidu_api_ok else "未配置百度 API，源已停用（抓页路径会被安全验证拦下，已不再使用）",
         "配置 BAIDU_API_KEY 与 BAIDU_SECRET_KEY 可提升稳定性",
         "echo BAIDU_API_KEY=your_key >> ~/.config/last30days-cn/.env",
     ))
@@ -138,8 +138,8 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "头条原生搜索接口可用" if toutiao_ok else
         "原生接口被签名/风控限制，**数据源只有按 id 取详情、无搜索端点**，"
         "也无 key 可配；该源已标为不可用、不再参与检索",
-        "暂无可行方案；用 --search baidu,wechat 做替代覆盖",
-        "python scripts/last30days.py \"你的主题\" --search baidu,wechat",
+        "暂无可行方案；微信公众号已覆盖大部分长文内容",
+        "",
     ))
 
     summary = {"ok": 0, "warn": 0, "error": 0}

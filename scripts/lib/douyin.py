@@ -93,7 +93,12 @@ def _search_via_tikhub(
     翻页用响应回传的 cursor + search_id + backtrace 三件套。
     """
     items: List[Dict[str, Any]] = []
-    publish_time = tikhub.bucket(from_date, to_date, "1", "7", "180")
+    # 一天档（"1"）**不用**：2026-10-05 实测上游对 publish_time=1 时好时坏，
+    # 同一组参数一分钟前 200、一分钟后 400「Request failed. Please retry」，
+    # 与 sort_type 无关；一周档 12/12 成功。Grok Bot 日报跑 --days 1，
+    # 用一天档等于抖音隔三差五整源 0 条。改用一周档 + sort_type=2（最新优先），
+    # 由引擎的日期过滤收窄到真实窗口——与「>7 天用半年档」同一个宁多勿少的原则。
+    publish_time = tikhub.bucket(from_date, to_date, "7", "7", "180")
     cursor, search_id, backtrace = 0, "", ""
     for _ in range(_TIKHUB_MAX_PAGES):
         body = {
