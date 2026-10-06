@@ -162,7 +162,7 @@ for t in tests/test_*.py; do python3 "$t" >/dev/null 2>&1 \
 python3 tools/xhs_note.py <note_id|分享链接> [--comments 30] [--images]
 ```
 
-另有四个「订阅/关键词流」工具，不走五源检索、各自直接调一个端点，都支持 `--json`（远程 MCP 用这个）：
+另有几个「订阅/关键词流」工具，不走五源检索、各自直接调一个端点，都支持 `--json`（远程 MCP 用这个）：
 
 | 工具 | 做什么 |
 |---|---|
@@ -170,6 +170,8 @@ python3 tools/xhs_note.py <note_id|分享链接> [--comments 30] [--images]
 | `tools/x_feed.py` | X 按关键词搜：给账号＝只在这些号里搜（默认 Latest）；不给＝全站（默认 Top），可加 `--lang` / `--min-faves` |
 | `tools/reddit_feed.py` | Reddit：只给版块＝拉版块热帖（TOP）；给 `--query`＝关键词搜（默认 RELEVANCE，TOP 会被无关版块的爆帖顶上来），可与版块同时给 |
 | `tools/tiktok_feed.py` | TikTok 按英文关键词搜（region=US，只留英文描述） |
+| `tools/youtube_feed.py` | YouTube 按关键词搜（相关性排序，按 today/this_week/this_month/this_year 取档；发布时间只有相对值，标 `date_approx`） |
+| `tools/youtube_transcript.py` | YouTube 单条视频字幕全文（$0.008/次，按需取；默认截断 2 万字符） |
 
 ```bash
 python3 tools/x_feed.py --keyword "Claude Code" --days 7 --lang en --min-faves 30
