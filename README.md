@@ -162,6 +162,20 @@ for t in tests/test_*.py; do python3 "$t" >/dev/null 2>&1 \
 python3 tools/xhs_note.py <note_id|分享链接> [--comments 30] [--images]
 ```
 
+另有四个「订阅/关键词流」工具，不走五源检索、各自直接调一个端点，都支持 `--json`（远程 MCP 用这个）：
+
+| 工具 | 做什么 |
+|---|---|
+| `tools/wechat_feed.py` | 拉指定公众号最近 N 天的文章 |
+| `tools/x_feed.py` | X 按关键词搜：给账号＝只在这些号里搜（默认 Latest）；不给＝全站（默认 Top），可加 `--lang` / `--min-faves` |
+| `tools/reddit_feed.py` | Reddit：只给版块＝拉版块热帖（TOP）；给 `--query`＝关键词搜（默认 RELEVANCE，TOP 会被无关版块的爆帖顶上来），可与版块同时给 |
+| `tools/tiktok_feed.py` | TikTok 按英文关键词搜（region=US，只留英文描述） |
+
+```bash
+python3 tools/x_feed.py --keyword "Claude Code" --days 7 --lang en --min-faves 30
+python3 tools/reddit_feed.py --query "Claude Code" --days 7 --pages 3
+```
+
 不属于检索引擎，独立使用。
 
 ## 已知边界
