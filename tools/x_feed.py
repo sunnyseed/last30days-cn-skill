@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""X 订阅号：在指定账号范围内按关键词搜最近 N 天的推文。
+"""X 关键词搜：在指定账号范围内（订阅号模式）或全站搜最近 N 天的推文。
 
 为什么是「订阅号 + 关键词」而不是全站搜（2026-10-06）：用户只想看自己挑过的那批中文 AI 号，
 做法同公众号白名单；但 X 号每天发帖量大、话题杂，所以再按当天检索词收一道。
@@ -14,9 +14,15 @@
 - created_at 只认 timeline[] 顶层那个；user_info / quoted 里也有 created_at（注册时间、被引推文）。
 - X 的匹配范围大于正文（引用推文、外链、账号信号都算），关键词不在 text 里的帖也会回来，属正常。
 
+全站模式（2026-10-06 加，给 Claude Code 日常查询用）：不给账号就去掉 from: 那段。默认 Top 排序——
+Latest 全站实测混进大量 0 赞帖；Top 是高互动但有博眼球的帖，由调用方模型筛。
+`lang:`、`min_faves:` 两个 X 原生算子实测有效，作可选参数；两种模式都能用，不给就和原来逐字相同。
+Top 不按时间排，所以「本页最老已出窗就停」那条只对 Latest 成立。
+
 用法：
   python3 x_feed.py dotey op7418 vista8 --keyword "Codex" --days 1
   python3 x_feed.py dotey op7418 --keyword "智能体" --days 3 --pages 2 --json   # MCP 用这个
+  python3 x_feed.py --keyword "Claude Code" --days 7 --lang en --min-faves 20   # 全站
 """
 import argparse
 import json
@@ -51,9 +57,21 @@ def _ts(created_at: str):
         return None
 
 
-def build_query(accounts, keyword: str, since: str, until: str) -> str:
-    froms = " OR ".join(f"from:{a}" for a in accounts)
-    return f"({froms}) {keyword} since:{since} until:{until}".replace("  ", " ")
+def build_query(accounts, keyword: str, since: str, until: str, lang: str = "", min_faves: int = 0) -> str:
+    parts = []
+    if accounts:
+        parts.append("(" + " OR ".join(f"from:{a}" for a in accounts) + ")")
+    parts.append(keyword)
+    if lang:
+        parts.append(f"lang:{lang}")
+    if min_faves:
+        parts.append(f"min_faves:{int(min_faves)}")
+    parts += [f"since:{since}", f"until:{until}"]
+    return " ".join(parts).replace("  ", " ")
+
+
+def default_sort(accounts) -> str:
+    return "Latest" if accounts else "Top"
 
 
 def _item(t: dict, keyword: str):
@@ -77,14 +95,16 @@ def _item(t: dict, keyword: str):
     }
 
 
-def fetch_group(accounts, keyword: str, cutoff: float, key: str, pages: int = 2) -> dict:
-    """一组账号 × 一个关键词，翻 pages 页，按 created_at 收窄到 cutoff 之后。"""
+def fetch_group(accounts, keyword: str, cutoff: float, key: str, pages: int = 2,
+                lang: str = "", min_faves: int = 0, sort: str = "") -> dict:
+    """一组账号（空＝全站）× 一个关键词，翻 pages 页，按 created_at 收窄到 cutoff 之后。"""
     since = time.strftime("%Y-%m-%d", time.gmtime(cutoff - 86400))   # 宽一天，窗口由 cutoff 定
     until = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 86400))
-    q = build_query(accounts, keyword, since, until)
+    q = build_query(accounts, keyword, since, until, lang, min_faves)
+    sort = sort or default_sort(accounts)
     items, cursor, err = [], None, None
     for _ in range(max(1, min(pages, MAX_PAGES))):
-        params = {"keyword": q, "search_type": "Latest"}
+        params = {"keyword": q, "search_type": sort}
         if cursor:
             params["cursor"] = cursor
         payload = tikhub.get(_PATH, params, key, tag="X")
@@ -110,18 +130,20 @@ def fetch_group(accounts, keyword: str, cutoff: float, key: str, pages: int = 2)
             items.append(it)
         nxt = data.get("next_cursor")
         # Latest 按时间倒序：本页最老的已早于窗口，再翻也只会更老
-        if not tl or not nxt or nxt == cursor or (oldest is not None and oldest < cutoff):
+        if not tl or not nxt or nxt == cursor or (sort == "Latest" and oldest is not None and oldest < cutoff):
             break
         cursor = nxt
     return {"accounts": accounts, "keyword": keyword, "error": err, "items": items}
 
 
-def run(accounts, keywords, days: float, key: str, pages: int = 2) -> dict:
+def run(accounts, keywords, days: float, key: str, pages: int = 2,
+        lang: str = "", min_faves: int = 0, sort: str = "") -> dict:
     cutoff = time.time() - days * 86400
-    groups = [accounts[i:i + GROUP_SIZE] for i in range(0, len(accounts), GROUP_SIZE)]
+    groups = [accounts[i:i + GROUP_SIZE] for i in range(0, len(accounts), GROUP_SIZE)] or [[]]
     tasks = [(g, k) for k in keywords for g in groups]
     with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
-        results = list(pool.map(lambda gk: fetch_group(gk[0], gk[1], cutoff, key, pages), tasks))
+        results = list(pool.map(
+            lambda gk: fetch_group(gk[0], gk[1], cutoff, key, pages, lang, min_faves, sort), tasks))
     seen, items = {}, []
     for r in results:
         for it in r["items"]:
@@ -133,18 +155,22 @@ def run(accounts, keywords, days: float, key: str, pages: int = 2) -> dict:
             it["keywords"] = [it.pop("keyword")]
             seen[it["tweet_id"]] = it
             items.append(it)
-    items.sort(key=lambda x: -x["ts"])
+    items.sort(key=lambda x: -x["ts"])  # Top 模式也按时间倒序给出，热度看 engagement
     errors = [{"accounts": r["accounts"][:3], "keyword": r["keyword"], "error": r["error"]}
               for r in results if r["error"]]
     return {"items": items, "errors": errors, "calls": len(tasks)}
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="在 X 订阅号范围内按关键词搜最近推文")
-    ap.add_argument("accounts", nargs="+", help="X 账号 screen_name（不带 @）")
+    ap = argparse.ArgumentParser(description="在 X 订阅号范围内（或全站）按关键词搜最近推文")
+    ap.add_argument("accounts", nargs="*", help="X 账号 screen_name（不带 @）；不给＝全站搜")
     ap.add_argument("--keyword", action="append", required=True, help="关键词，可重复给多个（各自单独搜）")
     ap.add_argument("--days", type=float, default=1, help="最近多少天（默认 1，按时间戳滚动计算）")
     ap.add_argument("--pages", type=int, default=2, help=f"每组每词最多翻几页（默认 2，上限 {MAX_PAGES}）")
+    ap.add_argument("--lang", default="", help="只要某语种（X 的 lang: 算子，如 en、zh、ja）")
+    ap.add_argument("--min-faves", type=int, default=0, help="最低点赞数（X 的 min_faves: 算子）")
+    ap.add_argument("--sort", choices=["Top", "Latest"], default="",
+                    help="排序（默认：给了账号用 Latest，全站用 Top）")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
     args = ap.parse_args()
 
@@ -152,7 +178,8 @@ def main() -> int:
     if not key:
         sys.exit("未找到 L30D_API_KEY")
     accounts = [a.strip().lstrip("@") for a in args.accounts if a.strip()]
-    res = run(accounts, [k.strip() for k in args.keyword if k.strip()], args.days, key, args.pages)
+    res = run(accounts, [k.strip() for k in args.keyword if k.strip()], args.days, key, args.pages,
+              args.lang.strip(), max(0, args.min_faves), args.sort)
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:

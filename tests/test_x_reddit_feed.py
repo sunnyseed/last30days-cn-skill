@@ -87,6 +87,32 @@ class TestX(unittest.TestCase):
         self.assertEqual(len(r["items"]), 1)     # 同一条去重
         self.assertEqual(sorted(r["items"][0]["keywords"]), ["Codex", "智能体"])
 
+    def test_subscription_mode_unchanged(self):
+        """订阅号模式（Grok Bot 日报在用）：查询串与排序必须和加全站模式前逐字相同。"""
+        page = _x_page([], cursor=None)
+        with mock.patch.object(x_feed.tikhub, "get", return_value=page) as g:
+            x_feed.run(["dotey", "op7418"], ["Codex"], 1, "K")
+        params = g.call_args.args[1]
+        self.assertEqual(params["search_type"], "Latest")
+        self.assertRegex(params["keyword"], r"^\(from:dotey OR from:op7418\) Codex since:\S+ until:\S+$")
+
+    def test_site_wide_query_and_top(self):
+        page = _x_page([], cursor=None)
+        with mock.patch.object(x_feed.tikhub, "get", return_value=page) as g:
+            r = x_feed.run([], ["Claude Code"], 7, "K", lang="en", min_faves=20)
+        params = g.call_args.args[1]
+        self.assertEqual(r["calls"], 1)
+        self.assertEqual(params["search_type"], "Top")
+        self.assertRegex(params["keyword"], r"^Claude Code lang:en min_faves:20 since:\S+ until:\S+$")
+
+    def test_top_does_not_stop_on_old_tweet(self):
+        """Top 不按时间排：本页有窗外旧帖也要继续翻；窗外那条照样丢。"""
+        pages = [_x_page([_tweet(0, 1), _tweet(1, 40)]), _x_page([_tweet(2, 1)], None)]
+        with mock.patch.object(x_feed.tikhub, "get", side_effect=pages) as g:
+            r = x_feed.fetch_group([], "Codex", NOW - 86400, "K", pages=2)
+        self.assertEqual(g.call_count, 2)
+        self.assertEqual(sorted(i["tweet_id"] for i in r["items"]), ["1000", "1002"])
+
     def test_upstream_failure_reported(self):
         with mock.patch.object(x_feed.tikhub, "get", return_value=None):
             r = x_feed.run(["a"], ["Codex"], 1, "K")
@@ -119,6 +145,21 @@ class TestReddit(unittest.TestCase):
         self.assertEqual(params["query"], "subreddit:ClaudeAI OR subreddit:LocalLLaMA")
         self.assertEqual((params["sort"], params["time_range"]), ("TOP", "day"))
         self.assertEqual(reddit_feed.time_range(3), "week")
+
+    def test_keyword_mode_query_and_relevance(self):
+        page = {"data": {"children": [], "pageInfo": {"hasNextPage": False}}}
+        with mock.patch.object(reddit_feed.tikhub, "get", return_value=page) as g:
+            reddit_feed.run([], 7, "K", query="Claude Code")
+            reddit_feed.run(["ClaudeAI"], 7, "K", query="Codex")
+            reddit_feed.run(["ClaudeAI", "LocalLLaMA"], 30, "K", query="Codex", sort="TOP")
+        q = [(c.args[1]["query"], c.args[1]["sort"], c.args[1]["time_range"]) for c in g.call_args_list]
+        self.assertEqual(q, [("Claude Code", "RELEVANCE", "week"),
+                             ("Codex subreddit:ClaudeAI", "RELEVANCE", "week"),
+                             ("Codex (subreddit:ClaudeAI OR subreddit:LocalLLaMA)", "TOP", "month")])
+
+    def test_needs_subs_or_query(self):
+        with self.assertRaises(ValueError):
+            reddit_feed.run([], 1, "K")
 
     def test_window_nsfw_sticky_filtered_and_permalink_absolute(self):
         page = {"data": {"children": [_post(1, 2), _post(2, 30), _post(3, 2, isNsfw=True),

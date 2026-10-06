@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reddit 订阅版块：拉指定版块最近 N 天的热帖（不带关键词）。
+"""Reddit：拉指定版块最近 N 天的热帖（订阅版块模式），或按关键词搜（关键词模式）。
 
 为什么只接订阅版块（2026-10-06）：按话题搜 Reddit 相关性很松，搜 "Claude Code" 当天 TOP 7 条里
 3 条无关（段子版、二手 iPod 版），加引号也一样；限定版块后结果干净。做法同公众号白名单，
@@ -9,9 +9,16 @@
 用 `subreddit:A OR subreddit:B …` 一次查全部版块，sort=TOP，time_range 按窗口取 day/week/month，
 createdAt（ISO，UTC）再按窗口收窄一次。
 
+关键词模式（2026-10-06 加，给 Claude Code 日常查询用）：上面说的「相关性很松」是 sort=TOP 的病——
+TOP 按分数排，关键词只要沾边就能把段子版的爆帖顶上来。同一个词改 sort=RELEVANCE，一周窗 7 条全对题、
+时间全在窗内。所以给了 query 默认就用 RELEVANCE。query 与版块可同时给：`<query> (subreddit:A OR …)`，实测有效。
+不给 query 时与原来逐字相同。
+
 用法：
   python3 reddit_feed.py ClaudeAI LocalLLaMA --days 1
   python3 reddit_feed.py ClaudeAI LocalLLaMA ClaudeCode --days 1 --pages 3 --json   # MCP 用这个
+  python3 reddit_feed.py --query "Claude Code" --days 7 --pages 3          # 全站关键词
+  python3 reddit_feed.py ClaudeAI --query "Codex" --days 7                 # 版块内关键词
 """
 import argparse
 import json
@@ -42,8 +49,17 @@ def time_range(days: float) -> str:
     return "day" if days <= 1 else "week" if days <= 7 else "month"
 
 
-def build_query(subs) -> str:
-    return " OR ".join(f"subreddit:{s}" for s in subs)
+def build_query(subs, query: str = "") -> str:
+    scope = " OR ".join(f"subreddit:{s}" for s in subs)
+    if not query:
+        return scope
+    if len(subs) > 1:
+        scope = f"({scope})"
+    return f"{query} {scope}".strip()
+
+
+def default_sort(query: str) -> str:
+    return "RELEVANCE" if query else "TOP"
 
 
 def _item(p: dict):
@@ -68,11 +84,13 @@ def _item(p: dict):
     }
 
 
-def run(subs, days: float, key: str, pages: int = 2) -> dict:
+def run(subs, days: float, key: str, pages: int = 2, query: str = "", sort: str = "") -> dict:
+    if not subs and not query:
+        raise ValueError("版块和关键词至少给一个")
     cutoff = time.time() - days * 86400
     items, seen, cursor, err, calls = [], set(), "", None, 0
     for _ in range(max(1, min(pages, MAX_PAGES))):
-        params = {"query": build_query(subs), "search_type": "post", "sort": "TOP",
+        params = {"query": build_query(subs, query), "search_type": "post", "sort": sort or default_sort(query),
                   "time_range": time_range(days), "need_format": "true"}
         if cursor:
             params["after"] = cursor
@@ -102,8 +120,11 @@ def run(subs, days: float, key: str, pages: int = 2) -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="拉 Reddit 订阅版块的最近热帖")
-    ap.add_argument("subs", nargs="+", help="版块名（不带 r/）")
+    ap = argparse.ArgumentParser(description="拉 Reddit 订阅版块的最近热帖，或按关键词搜")
+    ap.add_argument("subs", nargs="*", help="版块名（不带 r/）；给了 --query 时可不给，表示全站")
+    ap.add_argument("--query", default="", help="关键词（给了默认按 RELEVANCE 排）")
+    ap.add_argument("--sort", choices=["TOP", "RELEVANCE", "HOT"], default="",
+                    help="排序（默认：有关键词 RELEVANCE，否则 TOP）")
     ap.add_argument("--days", type=float, default=1, help="最近多少天（默认 1）")
     ap.add_argument("--pages", type=int, default=2, help=f"最多翻几页（默认 2，每页 7 条，上限 {MAX_PAGES}）")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
@@ -113,7 +134,9 @@ def main() -> int:
     if not key:
         sys.exit("未找到 L30D_API_KEY")
     subs = [s.strip().removeprefix("r/") for s in args.subs if s.strip()]
-    res = run(subs, args.days, key, args.pages)
+    if not subs and not args.query.strip():
+        sys.exit("版块和 --query 至少给一个")
+    res = run(subs, args.days, key, args.pages, args.query.strip(), args.sort)
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
