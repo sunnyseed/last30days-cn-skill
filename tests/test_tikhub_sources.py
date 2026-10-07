@@ -52,6 +52,22 @@ calls = check("微博", weibo, _fixture("weibo"),
 assert calls[0][1]["timescope"] == f"custom:{FROM}:{TO}", "微博没把 30 天窗压到服务端"
 assert calls[0][1]["search_type"] == "hot", "微博用热门（all 按时间倒序，30 天窗会退化成当天）"
 
+# 回归（2026-10-07）：hot 档对多词查询会回落成全站热门（与检索词零重叠），首页全 0 相关就换 all 档
+_junk = json.loads(json.dumps(_fixture("weibo")))
+for _r, _t in zip(_junk["data"]["parsed_data"]["results"], ("开工", "#阿根廷vs贝宁#上半场比赛结束")):
+    _r["content"] = _t
+_calls = []
+def _by_sort(path, arg, key, tag=""):
+    _calls.append(arg)
+    return _junk if arg["search_type"] == "hot" else _fixture("weibo")
+tikhub.get = _by_sort
+_items = weibo._search_via_tikhub("纳指100", FROM, TO, 10, "K")
+assert [c["search_type"] for c in _calls][:2] == ["hot", "all"], f"首页全不相关时应改用 all 档：{_calls}"
+assert len(_items) == 2 and all("开工" not in i["text"] for i in _items), "全站热门的帖子不该留下"
+tikhub.get = lambda path, arg, key, tag="": _junk
+assert weibo._search_via_tikhub("纳指100", FROM, TO, 10, "K") == [], "两档都不相关时宁可空着"
+print("  微博 hot 回落全站热门 → 改 all 档、丢 0 相关 OK")
+
 calls = check("B站", bilibili, _fixture("bilibili"),
               lambda: bilibili._search_via_tikhub("纳指100", FROM, TO, 10, 1, "K"))
 assert calls[0][1]["order"] == "totalrank", "B站 order 必填，用综合排序"

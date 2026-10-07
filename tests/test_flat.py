@@ -69,6 +69,15 @@ class Shape(unittest.TestCase):
         self.assertEqual(wb["date"], "2026-09-28")
         self.assertEqual(wb["engagement"].get("likes"), 3)
 
+    def test_duration_seconds(self):
+        # B站是「分:秒」/「时:分:秒」字符串（schema 标 int 但引擎实际塞字符串），抖音是毫秒
+        d = {"bilibili": [{"title": "a", "duration": "7:26"}, {"title": "b", "duration": "1:02:03"},
+                          {"title": "c", "duration": ""}],
+             "douyin": [{"text": "d", "duration": 73267}, {"text": "e", "duration": 0}],
+             "weibo": [{"text": "f"}]}
+        got = [i["duration"] for i in flat.flatten(d)]
+        self.assertEqual(got, [None, 446, 3723, None, 73, None])
+
     def test_source_status(self):
         d = {"weibo": [], "weibo_error": "超时", "wechat": [{"title": "x"}]}
         ok, skipped = flat.source_status(d)

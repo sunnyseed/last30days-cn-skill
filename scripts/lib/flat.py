@@ -14,7 +14,7 @@ schema 一改，这里的测试先红。
 sys.path 后 `from lib import flat`：lib/ 里有个 http.py，把 lib 本身加进 sys.path
 会顶掉标准库 http。lib/__init__.py 是空的，不会连带加载检索代码。
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 SOURCES = ["xiaohongshu", "weibo", "bilibili", "douyin", "wechat", "zhihu", "baidu", "toutiao"]
 SOURCE_CN = {"xiaohongshu": "小红书", "weibo": "微博", "bilibili": "B站", "douyin": "抖音",
@@ -35,6 +35,24 @@ def first(item: Dict[str, Any], keys) -> str:
     return ""
 
 
+def duration_seconds(source: str, raw: Any) -> Optional[int]:
+    """视频时长统一成秒；拿不到给 None（不是 0：0 会被下游当成「很短」）。
+
+    B站是网页版那样的字符串 `"7:26"` / `"1:02:03"`；抖音 `aweme.duration` 是**毫秒**（实测 73267）。
+    """
+    try:
+        if source == "bilibili" and isinstance(raw, str) and raw.strip():
+            secs = 0
+            for part in raw.strip().split(":"):
+                secs = secs * 60 + int(part)
+            return secs
+        if source == "douyin" and isinstance(raw, (int, float)) and raw > 0:
+            return int(raw) // 1000
+    except ValueError:
+        pass
+    return None
+
+
 def flatten_item(source: str, raw: Dict[str, Any]) -> Dict[str, Any]:
     title = first(raw, TITLE_KEYS)
     body = first(raw, BODY_KEYS)
@@ -53,6 +71,7 @@ def flatten_item(source: str, raw: Dict[str, Any]) -> Dict[str, Any]:
         "engagement": raw.get("engagement") or {},
         "score": raw.get("score", 0),
         "relevance": raw.get("relevance", 0.0),
+        "duration": duration_seconds(source, raw.get("duration")),
     }
 
 

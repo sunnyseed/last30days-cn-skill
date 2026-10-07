@@ -107,7 +107,10 @@ def _search_via_tikhub(
     items: List[Dict[str, Any]] = []
     pages = min(_TIKHUB_MAX_PAGES, max(1, -(-limit // 10)))
     started = time.monotonic()
-    for page in range(1, pages + 1):
+    sort = _TIKHUB_SORT
+    page = 0
+    while page < pages:
+        page += 1
         elapsed = time.monotonic() - started
         # 上一页耗时就是下一页的估计；估不完就带着已有结果收工，别把整源赔进去
         if page > 1 and elapsed + elapsed / (page - 1) > _TIKHUB_BUDGET:
@@ -115,7 +118,7 @@ def _search_via_tikhub(
             break
         params = {
             "q": topic,
-            "search_type": _TIKHUB_SORT,
+            "search_type": sort,
             "timescope": f"custom:{from_date}:{to_date}",
             "page": page,
         }
@@ -130,12 +133,26 @@ def _search_via_tikhub(
             stats = parsed["search_stats"].get("search_stats")
             if stats:
                 sys.stderr.write(f"[微博] 数据源生效区间：{stats}\n")
-        items.extend(_parse_tikhub_post(r) for r in results)
+        batch = [_parse_tikhub_post(r) for r in results]
+        # 2026-10-07：hot 档对多词查询（plan 给的都是「Codex 编程」这种）匹配不上时，
+        # 微博回的是**全站热门**（开工、三花猫、阿根廷vs贝宁），与检索词零重叠。
+        # 首页全是 0 相关就换 all 档重来一次；all 档实测能搜到（10 条里 4 条含词）。
+        if page == 1 and sort == "hot" and not any(_relevant(topic, it) for it in batch):
+            sys.stderr.write("[微博] 热门档返回的全不含检索词（微博回落成全站热门），改用按时间档\n")
+            sort, page = "all", 0
+            continue
+        items.extend(batch)
         if len(items) >= limit:
             break
+    # 后续页同理可能混进全站热门；0 相关的一律不要（同义词命中如「纳斯达克100」对「纳指100」仍有分，不会误丢）
+    items = [it for it in items if _relevant(topic, it)]
     if items:
         sys.stderr.write(f"[微博] 数据源获取 {len(items)} 条结果\n")
     return items[:limit]
+
+
+def _relevant(topic: str, item: Dict[str, Any]) -> bool:
+    return relevance.token_overlap_relevance(topic, item.get("text", "")) > 0
 
 
 def _tikhub_url(path: str) -> str:
