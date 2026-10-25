@@ -41,6 +41,7 @@ GROUP_SIZE = 14      # 14 个 from: 约 280 字符，给关键词和时间算子
 MAX_PAGES = 3
 _WORKERS = 3
 _MIN_TEXT = 6        # 去掉 @、链接后不足 6 个字符的（「Yes」「哈哈」「👍」）不算内容
+_QUOTED_MAX = 1000   # 被引推文正文上限；下游简报要读原帖再写（2026-10-25），但别把回包撑太大
 
 _MENTION_URL = re.compile(r"@\w+|https?://\S+")
 
@@ -74,6 +75,21 @@ def default_sort(accounts) -> str:
     return "Latest" if accounts else "Top"
 
 
+def _quoted(t: dict):
+    """引用推文的原帖。TikHub 回包 `quoted`：tweet_id / text / created_at / author{screen_name,name}（2026-10-25 实测）。"""
+    q = t.get("quoted")
+    if not isinstance(q, dict):
+        return None
+    au = q.get("author") or {}
+    sn, tid, text = au.get("screen_name") or "", str(q.get("tweet_id") or ""), (q.get("text") or "").strip()
+    if not text:
+        return None
+    ts = _ts(q.get("created_at"))
+    return {"account": sn, "name": au.get("name") or sn, "text": text[:_QUOTED_MAX],
+            "url": f"https://x.com/{sn}/status/{tid}" if sn and tid else "",
+            "date": _date(ts) if ts else ""}
+
+
 def _item(t: dict, keyword: str):
     sn = t.get("screen_name") or (t.get("user_info") or {}).get("screen_name") or ""
     tid = str(t.get("tweet_id") or "")
@@ -83,7 +99,7 @@ def _item(t: dict, keyword: str):
     eng = {"likes": t.get("favorites"), "reposts": t.get("retweets"), "num_comments": t.get("replies"),
            "quotes": t.get("quotes"), "bookmarks": t.get("bookmarks"), "views": t.get("views")}
     eng = {k: int(v) for k, v in eng.items() if isinstance(v, (int, float)) or (isinstance(v, str) and v.isdigit())}
-    return {
+    it = {
         "account": sn,
         "name": (t.get("user_info") or {}).get("name") or sn,
         "text": text,
@@ -93,6 +109,10 @@ def _item(t: dict, keyword: str):
         "engagement": eng,
         "keyword": keyword,
     }
+    quoted = _quoted(t)
+    if quoted:
+        it["quoted"] = quoted
+    return it
 
 
 def fetch_group(accounts, keyword: str, cutoff: float, key: str, pages: int = 2,
@@ -124,7 +144,8 @@ def fetch_group(accounts, keyword: str, cutoff: float, key: str, pages: int = 2,
             it = _item(t, keyword)
             if not it or it["text"].startswith("RT @"):
                 continue
-            if len(_MENTION_URL.sub("", it["text"]).strip()) < _MIN_TEXT:
+            # 引用推文的评论常只有一两个字（「厉害」），内容在原帖里，不按短文丢
+            if not it.get("quoted") and len(_MENTION_URL.sub("", it["text"]).strip()) < _MIN_TEXT:
                 continue
             it.update(ts=int(ts), date=_date(ts))
             items.append(it)

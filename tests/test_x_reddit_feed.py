@@ -64,6 +64,22 @@ class TestX(unittest.TestCase):
             r = x_feed.fetch_group(["dotey"], "Codex", NOW - 86400, "K")
         self.assertEqual([i["tweet_id"] for i in r["items"]], ["1003"])
 
+    def test_quoted_original_carried_and_short_quote_kept(self):
+        """引用推文带出原帖；评论只有两个字但原帖有料的不按短文丢（形状照 10-25 实测回包）。"""
+        q = _tweet(0, 1, "厉害")
+        q["quoted"] = {"tweet_id": "999", "text": "Introducing SKY-001, the first Engineering World Model.",
+                       "created_at": _rfc(NOW - 7200),
+                       "author": {"screen_name": "spisallyouneed", "name": "Sam Pasupalak"}}
+        page = _x_page([q, _tweet(1, 1, "哈哈"), _tweet(2, 1)], cursor=None)
+        with mock.patch.object(x_feed.tikhub, "get", return_value=page):
+            r = x_feed.fetch_group(["dotey"], "Codex", NOW - 86400, "K")
+        self.assertEqual([i["tweet_id"] for i in r["items"]], ["1000", "1002"])
+        self.assertEqual(r["items"][0]["quoted"], {
+            "account": "spisallyouneed", "name": "Sam Pasupalak",
+            "text": "Introducing SKY-001, the first Engineering World Model.",
+            "url": "https://x.com/spisallyouneed/status/999", "date": "2026-10-06"})
+        self.assertNotIn("quoted", r["items"][1])
+
     def test_stops_paging_once_older_than_window(self):
         pages = [_x_page([_tweet(0, 1), _tweet(1, 40)]), _x_page([_tweet(2, 1)])]
         with mock.patch.object(x_feed.tikhub, "get", side_effect=pages) as g:
